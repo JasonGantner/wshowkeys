@@ -126,7 +126,7 @@ static void devmgr_run(int sockfd, const char *devpath) {
 int devmgr_start(int *fd, pid_t *pid, const char *devpath) {
 	if (geteuid() != 0) {
 		fprintf(stderr, "wshowkeys needs to be setuid to read input events\n");
-		// return 1;
+		return 1;
 	}
 
 	int sock[2];
@@ -140,7 +140,7 @@ int devmgr_start(int *fd, pid_t *pid, const char *devpath) {
 		fprintf(stderr, "devmgr: fork: %s", strerror(errno));
 		close(sock[0]);
 		close(sock[1]);
-		// return 1;
+		return 1;
 	} else if (child == 0) {
 		close(sock[0]);
 		devmgr_run(sock[1], devpath); /* Does not return */
@@ -151,11 +151,11 @@ int devmgr_start(int *fd, pid_t *pid, const char *devpath) {
 
 	if (setgid(getgid()) != 0) {
 		fprintf(stderr, "devmgr: setgid: %s\n", strerror(errno));
-		// return 1;
+		return 1;
 	}
 	if (setuid(getuid()) != 0) {
 		fprintf(stderr, "devmgr: setuid: %s\n", strerror(errno));
-		// return 1;
+		return 1;
 	}
 	if (setuid(0) != -1) {
 		fprintf(stderr, "devmgr: failed to drop root\n");

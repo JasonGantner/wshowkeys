@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <libinput.h>
 #include <libudev.h>
+#include <math.h>
 #include <poll.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,7 +44,7 @@ struct wsk_state {
 
 	uint32_t foreground, background, specialfg;
 	const char *font;
-	int timeout;
+	struct timespec timeout;
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -528,8 +529,10 @@ int main(int argc, char *argv[]) {
 	state.specialfg = 0xAAAAAAFF;
 	state.foreground = 0xFFFFFFFF;
 	state.font = "monospace 24";
-	state.timeout = 1;
+	state.timeout.tv_sec = 1;
+	state.timeout.tv_nsec = 0;
 
+	double to;
 	int c;
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:")) != -1) {
 		switch (c) {
@@ -546,7 +549,9 @@ int main(int argc, char *argv[]) {
 			state.font = optarg;
 			break;
 		case 't':
-			state.timeout = atoi(optarg);
+			to = atof(optarg);
+			state.timeout.tv_sec  = floor(to);
+			state.timeout.tv_nsec = 1000*1000*1000*(to-floor(to));
 			break;
 		case 'a':
 			if (strcmp(optarg, "top") == 0) {
@@ -673,8 +678,8 @@ int main(int argc, char *argv[]) {
 		/* Clear out old keys */
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		if (now.tv_sec >= state.last_key.tv_sec + state.timeout &&
-				now.tv_nsec >= state.last_key.tv_nsec) {
+		if (now.tv_sec >= state.last_key.tv_sec + state.timeout.tv_sec
+			 && now.tv_nsec >= state.last_key.tv_nsec + state.timeout.tv_nsec) {
 			struct wsk_keypress *key = state.keys;
 			while (key) {
 				struct wsk_keypress *next = key->next;

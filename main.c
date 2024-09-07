@@ -352,11 +352,11 @@ static void output_geometry(void *data, struct wl_output *wl_output,
 
 static void output_mode(void *data, struct wl_output *wl_output,
 		uint32_t flags, int32_t width, int32_t height, int32_t refresh) {
-	// Who cares
+	// Who cares FIXME
 }
 
 static void output_done(void *data, struct wl_output *wl_output) {
-	// Who cares
+	// Who cares FIXME
 }
 
 static void output_scale(void *data,

@@ -1,5 +1,6 @@
 #ifndef _DEVMGR_H
 #define _DEVMGR_H
+#include <fcntl.h>
 
 int devmgr_start(int *fd, pid_t *pid, const char *devpath);
 int devmgr_open(int sockfd, const char *path);

@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
@@ -498,15 +499,28 @@ static uint32_t parse_color(const char *color) {
 	return res;
 }
 
+struct wsk_state state = { 0 };
+
+void exit_devmgr(void){
+	devmgr_finish(state.devmgr, state.devmgr_pid);
+}
+
+void exit_libinput(void){
+	libinput_unref(state.libinput);
+}
+
+void exit_wayland(void){
+	wl_display_disconnect(state.display);
+}
+
 int main(int argc, char *argv[]) {
 	/* NOTICE: This code runs as root */
-	struct wsk_state state = { 0 };
 	if (devmgr_start(&state.devmgr, &state.devmgr_pid, INPUTDEVPATH) > 0) {
 		return 1;
 	}
+	atexit(exit_devmgr);
 
 	/* Begin normal user code: */
-	int ret = 0;
 
 	unsigned int anchor = 0;
 	int margin = 32;
@@ -562,32 +576,29 @@ int main(int argc, char *argv[]) {
 	state.udev = udev_new();
 	if (!state.udev) {
 		fprintf(stderr, "udev_create: %s\n", strerror(errno));
-		ret = 1;
-		goto exit;
+		exit(3);
 	}
 
-	state.libinput = libinput_udev_create_context(
-			&libinput_impl, &state.devmgr, state.udev);
+	state.libinput = libinput_udev_create_context(&libinput_impl, &state.devmgr, state.udev);
 	udev_unref(state.udev);
 	if (!state.libinput) {
 		fprintf(stderr, "libinput_udev_create_context: %s\n", strerror(errno));
-		ret = 1;
-		goto exit;
+		exit(4);
 	}
+	atexit(exit_libinput);
 
 	state.xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 	if (!state.xkb_context) {
 		fprintf(stderr, "xkb_context_new: %s\n", strerror(errno));
-		ret = 1;
-		goto exit;
+		exit(5);
 	}
 
 	state.display = wl_display_connect(NULL);
 	if (!state.display) {
 		fprintf(stderr, "wl_display_connect: %s\n", strerror(errno));
-		ret = 1;
-		goto exit;
+		exit(6);
 	}
+	atexit(exit_wayland);
 
 	state.registry = wl_display_get_registry(state.display);
 	assert(state.registry);
@@ -607,8 +618,7 @@ int main(int argc, char *argv[]) {
 		if (!need_globals[i].ptr) {
 			fprintf(stderr, "Error: required Wayland interface '%s' "
 					"is not present\n", need_globals[i].name);
-			ret = 1;
-			goto exit;
+			exit(7);
 		}
 	}
 
@@ -640,23 +650,24 @@ int main(int argc, char *argv[]) {
 	};
 
 	state.run = true;
+	int timeout;
 	while (state.run) {
 		errno = 0;
 		do {
 			if (wl_display_flush(state.display) == -1 && errno != EAGAIN) {
 				fprintf(stderr, "wl_display_flush: %s\n", strerror(errno));
-				break;
+				exit(8);
 			}
 		} while (errno == EAGAIN);
 
-		int timeout = -1;
+		timeout = -1;
 		if (state.keys) {
 			timeout = 100;
 		}
 
 		if (poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), timeout) < 0) {
 			fprintf(stderr, "poll: %s\n", strerror(errno));
-			break;
+			exit(9);
 		}
 
 		/* Clear out old keys */
@@ -677,7 +688,7 @@ int main(int argc, char *argv[]) {
 		if ((pollfds[0].revents & POLLIN)) {
 			if (libinput_dispatch(state.libinput) != 0) {
 				fprintf(stderr, "libinput_dispatch: %s\n", strerror(errno));
-				break;
+				exit(10);
 			}
 			struct libinput_event *event;
 			while ((event = libinput_get_event(state.libinput))) {
@@ -689,13 +700,8 @@ int main(int argc, char *argv[]) {
 		if ((pollfds[1].revents & POLLIN)
 				&& wl_display_dispatch(state.display) == -1) {
 			fprintf(stderr, "wl_display_dispatch: %s\n", strerror(errno));
-			break;
+			exit(11);
 		}
 	}
-
-exit:
-	wl_display_disconnect(state.display);
-	libinput_unref(state.libinput);
-	devmgr_finish(state.devmgr, state.devmgr_pid);
-	return ret;
+	return 0;
 }

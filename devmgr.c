@@ -108,7 +108,7 @@ static void devmgr_run(int sockfd, const char *devpath) {
 			}
 			int fd = open(msg.path, O_RDONLY|O_CLOEXEC|O_NOCTTY|O_NONBLOCK);
 			int ret = errno;
-			send_msg(sockfd, ret ? -1 : fd, &ret, sizeof(ret));
+			send_msg(sockfd, ret ? -1 : fd, &ret, sizeof(int));
 			if (fd >= 0) {
 				close(fd);
 			}
@@ -123,12 +123,12 @@ static void devmgr_run(int sockfd, const char *devpath) {
 	exit(0);
 }
 
-int devmgr_start(int *fd, pid_t *pid, const char *devpath) {
+int devmgr_start(bool allow_root, int *fd, pid_t *pid, const char *devpath) {
 	// TODO check for the need of setuid
-	if (geteuid() != 0) {
-		fprintf(stderr, "wshowkeys needs to be setuid to read input events\n");
-		return 1;
-	}
+	// if (geteuid() != 0) {
+	// 	fprintf(stderr, "wshowkeys needs to be setuid to read input events\n");
+	// 	return 1;
+	// }
 
 	int sock[2];
 	if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sock) < 0) {
@@ -158,8 +158,9 @@ int devmgr_start(int *fd, pid_t *pid, const char *devpath) {
 		fprintf(stderr, "devmgr: setuid: %s\n", strerror(errno));
 		return 1;
 	}
-	if (setuid(0) != -1) {
-		fprintf(stderr, "devmgr: failed to drop root\n");
+
+	if (allow_root == false && setuid(0) != -1) {
+		fprintf(stderr, "devmgr: failed to drop root. Use --allow-root if this is expected\n");
 		return 1;
 	}
 

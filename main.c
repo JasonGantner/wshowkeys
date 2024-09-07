@@ -499,6 +499,16 @@ static uint32_t parse_color(const char *color) {
 	return res;
 }
 
+
+const char* ALLOW_ROOT = "--allow-root";
+
+void usage(void){
+	fprintf(stderr, "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
+			"[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
+			"[-o output]\n\t%s\n", ALLOW_ROOT);
+	exit(2);
+}
+
 struct wsk_state state = { 0 };
 
 void exit_devmgr(void){
@@ -514,8 +524,18 @@ void exit_wayland(void){
 }
 
 int main(int argc, char *argv[]) {
-	/* NOTICE: This code runs as root */
-	if (devmgr_start(&state.devmgr, &state.devmgr_pid, INPUTDEVPATH) > 0) {
+	/* NOTICE: This code may run as root */
+
+	int ret=1;
+	bool allow_root = false;
+	// blindly lookk for --allow-root
+	while( ret < argc && allow_root == false){
+		if(strncmp(argv[ret], ALLOW_ROOT, 14)==0)
+			allow_root = true;
+		ret++;
+	}
+
+	if (devmgr_start(allow_root,&state.devmgr, &state.devmgr_pid, INPUTDEVPATH) > 0) {
 		return 1;
 	}
 	atexit(exit_devmgr);
@@ -530,8 +550,9 @@ int main(int argc, char *argv[]) {
 	state.font = "monospace 24";
 	state.timeout = 1;
 
+	// Parse args
 	int c;
-	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:")) != -1) {
+	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:-:")) != -1) {
 		switch (c) {
 		case 'b':
 			state.background = parse_color(optarg);
@@ -565,12 +586,25 @@ int main(int argc, char *argv[]) {
 		case 'o':
 			fprintf(stderr, "-o is unimplemented\n");
 			return 0;
+		case '-':
+			if( strncmp(optarg, (ALLOW_ROOT+2), 13) != 0){
+				fprintf(stderr,"unsupported option: --%s\n", optarg);
+				usage();
+			}
+			break;
+
 		default:
-			fprintf(stderr, "usage: wshowkeys [-b|-f|-s #RRGGBB[AA]] [-F font] "
-					"[-t timeout]\n\t[-a top|left|right|bottom] [-m margin] "
-					"[-o output]\n");
-			return 1;
+			fprintf(stderr, "unsupported option: %c\n", c);
+			usage();
 		}
+	}
+
+	if(optind < argc){
+		while(optind<argc){
+			fprintf(stderr, "extraneous argument on CLI: %s\n", argv[optind]);
+			optind++;
+		}
+		usage();
 	}
 
 	state.udev = udev_new();

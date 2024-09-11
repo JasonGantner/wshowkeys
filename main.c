@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <libinput.h>
 #include <libudev.h>
+#include <math.h>
 #include <poll.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,7 +44,10 @@ struct wsk_state {
 
 	uint32_t foreground, background, specialfg;
 	const char *font;
-	int timeout;
+
+	struct timespec timeout;
+	int keypress_timeout;
+
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -528,7 +532,9 @@ int main(int argc, char *argv[]) {
 	state.specialfg = 0xAAAAAAFF;
 	state.foreground = 0xFFFFFFFF;
 	state.font = "monospace 24";
-	state.timeout = 1;
+	state.timeout.tv_sec = 1;
+	state.timeout.tv_nsec = 0;
+	state.keypress_timeout = 100;
 
 	int c;
 	while ((c = getopt(argc, argv, "hb:f:s:F:t:a:m:o:")) != -1) {
@@ -546,7 +552,14 @@ int main(int argc, char *argv[]) {
 			state.font = optarg;
 			break;
 		case 't':
-			state.timeout = atoi(optarg);
+			;
+			double to = atof(optarg);
+			state.timeout.tv_sec  = floor(to);
+			state.timeout.tv_nsec = 1000*1000*1000*(to-floor(to));
+			if(to > 1)
+				; // no change
+			else
+				state.keypress_timeout = state.timeout.tv_nsec/(1000*1000*10); // nsec to msec, then divided by 10
 			break;
 		case 'a':
 			if (strcmp(optarg, "top") == 0) {
@@ -650,7 +663,6 @@ int main(int argc, char *argv[]) {
 	};
 
 	state.run = true;
-	int timeout;
 	while (state.run) {
 		errno = 0;
 		do {
@@ -660,12 +672,7 @@ int main(int argc, char *argv[]) {
 			}
 		} while (errno == EAGAIN);
 
-		timeout = -1;
-		if (state.keys) {
-			timeout = 100;
-		}
-
-		if (poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), timeout) < 0) {
+		if (poll(pollfds, sizeof(pollfds) / sizeof(pollfds[0]), (state.keys ? state.keypress_timeout : -1) ) < 0) {
 			fprintf(stderr, "poll: %s\n", strerror(errno));
 			exit(9);
 		}
@@ -673,8 +680,12 @@ int main(int argc, char *argv[]) {
 		/* Clear out old keys */
 		struct timespec now;
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		if (now.tv_sec >= state.last_key.tv_sec + state.timeout &&
-				now.tv_nsec >= state.last_key.tv_nsec) {
+		long nsec_limit = state.last_key.tv_nsec + state.timeout.tv_nsec;
+		if(nsec_limit >= 1000000000){
+			nsec_limit -= 1000000000;
+			now.tv_sec += 1;
+		}
+		if (now.tv_sec >= state.last_key.tv_sec + state.timeout.tv_sec && now.tv_nsec >= nsec_limit) {
 			struct wsk_keypress *key = state.keys;
 			while (key) {
 				struct wsk_keypress *next = key->next;

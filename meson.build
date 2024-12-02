@@ -57,6 +57,7 @@ executable(
 		'main.c',
 		'pango.c',
 		'shm.c',
+		'wl_shm.c'
 	),
 	dependencies: [
 		cairo,

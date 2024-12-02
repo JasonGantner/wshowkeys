@@ -1,7 +1,7 @@
 project(
 	'wshowkeys',
 	'c',
-	version: '0.2.0',
+	version: '0.2.1',
 	license: 'GPL',
 	meson_version: '>=0.58.0',
 	default_options: [
@@ -39,6 +39,7 @@ add_project_arguments([
 
 cairo          = dependency('cairo')
 libinput       = dependency('libinput')
+math           = cc.find_library('m')
 pango          = dependency('pango')
 pangocairo     = dependency('pangocairo')
 udev           = dependency('libudev')
@@ -63,6 +64,7 @@ executable(
 		cairo,
 		client_protos,
 		libinput,
+		math,
 		pango,
 		pangocairo,
 		rt,
